@@ -1,0 +1,345 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Крестики-нолики</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }
+
+        .container {
+            text-align: center;
+            background: white;
+            padding: 40px;
+            border-radius: 20px;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+        }
+
+        h1 {
+            color: #333;
+            margin-bottom: 20px;
+            font-size: 2.5rem;
+        }
+
+        .status {
+            font-size: 1.5rem;
+            margin-bottom: 20px;
+            color: #555;
+            min-height: 40px;
+        }
+
+        .board {
+            display: grid;
+            grid-template-columns: repeat(3, 100px);
+            grid-template-rows: repeat(3, 100px);
+            gap: 10px;
+            margin-bottom: 30px;
+        }
+
+        .cell {
+            width: 100px;
+            height: 100px;
+            background: #f0f0f0;
+            border: none;
+            border-radius: 10px;
+            font-size: 3rem;
+            font-weight: bold;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }
+
+        .cell:hover:not(.taken) {
+            background: #e0e0e0;
+            transform: scale(1.05);
+        }
+
+        .cell.x {
+            color: #667eea;
+        }
+
+        .cell.o {
+            color: #764ba2;
+        }
+
+        .cell.winner {
+            background: #4CAF50;
+            color: white;
+            animation: pulse 0.5s ease-in-out;
+        }
+
+        .cell.blinking {
+            animation: blink 0.3s ease-in-out infinite;
+        }
+
+        @keyframes blink {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.3; }
+        }
+
+        @keyframes pulse {
+            0%, 100% { transform: scale(1); }
+            50% { transform: scale(1.1); }
+        }
+
+        .restart-btn {
+            padding: 15px 40px;
+            font-size: 1.2rem;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            border-radius: 30px;
+            cursor: pointer;
+            transition: transform 0.3s ease, box-shadow 0.3s ease;
+        }
+
+        .restart-btn:hover {
+            transform: translateY(-3px);
+            box-shadow: 0 10px 30px rgba(102, 126, 234, 0.4);
+        }
+
+        .score {
+            display: flex;
+            justify-content: center;
+            gap: 40px;
+            margin-bottom: 20px;
+            font-size: 1.2rem;
+        }
+
+        .score-item {
+            padding: 10px 20px;
+            background: #f0f0f0;
+            border-radius: 10px;
+        }
+
+        .score-item span {
+            font-weight: bold;
+            font-size: 1.5rem;
+        }
+
+        .score-x { color: #667eea; }
+        .score-o { color: #764ba2; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Крестики-нолики</h1>
+        
+        <div class="score">
+            <div class="score-item score-x">X: <span id="scoreX">0</span></div>
+            <div class="score-item score-o">O: <span id="scoreO">0</span></div>
+        </div>
+
+        <div class="status" id="status">Ход игрока X</div>
+        
+        <div class="board" id="board">
+            <button class="cell" data-index="0"></button>
+            <button class="cell" data-index="1"></button>
+            <button class="cell" data-index="2"></button>
+            <button class="cell" data-index="3"></button>
+            <button class="cell" data-index="4"></button>
+            <button class="cell" data-index="5"></button>
+            <button class="cell" data-index="6"></button>
+            <button class="cell" data-index="7"></button>
+            <button class="cell" data-index="8"></button>
+        </div>
+
+        <button class="restart-btn" id="restartBtn">Новая игра</button>
+    </div>
+
+    <script>
+        const cells = document.querySelectorAll('.cell');
+        const status = document.getElementById('status');
+        const restartBtn = document.getElementById('restartBtn');
+        const scoreXEl = document.getElementById('scoreX');
+        const scoreOEl = document.getElementById('scoreO');
+
+        let currentPlayer = 'X';
+        let board = ['', '', '', '', '', '', '', '', ''];
+        let gameActive = true;
+        let scoreX = 0;
+        let scoreO = 0;
+        let xPositions = []; // очередь позиций X (максимум 3)
+        let oPositions = []; // очередь позиций O (максимум 3)
+        let cellTimers = {}; // таймеры для каждой ячейки
+        let cellBlinkTimers = {}; // таймеры для мигания
+
+        const winPatterns = [
+            [0, 1, 2], [3, 4, 5], [6, 7, 8], // горизонтали
+            [0, 3, 6], [1, 4, 7], [2, 5, 8], // вертикали
+            [0, 4, 8], [2, 4, 6]             // диагонали
+        ];
+
+        function removeSymbol(index) {
+            if (board[index] === '') return;
+
+            const symbol = board[index];
+            const positions = symbol === 'X' ? xPositions : oPositions;
+
+            // Удаляем из очереди позиций
+            const posIndex = positions.indexOf(index);
+            if (posIndex > -1) {
+                positions.splice(posIndex, 1);
+            }
+
+            // Очищаем ячейку
+            board[index] = '';
+            cells[index].textContent = '';
+            cells[index].classList.remove('taken', 'x', 'o', 'winner', 'blinking');
+
+            // Очищаем таймер
+            if (cellTimers[index]) {
+                clearTimeout(cellTimers[index]);
+                delete cellTimers[index];
+            }
+
+            // Очищаем таймер мигания
+            if (cellBlinkTimers[index]) {
+                clearTimeout(cellBlinkTimers[index]);
+                delete cellBlinkTimers[index];
+            }
+
+            // Проверяем, не привело ли удаление к победе другого игрока
+            const otherPlayer = symbol === 'X' ? 'O' : 'X';
+            if (checkWinForPlayer(otherPlayer)) {
+                gameActive = false;
+                status.textContent = `Победил игрок ${otherPlayer}! 🎉`;
+                updateScore(otherPlayer);
+                highlightWinner(otherPlayer);
+            } else if (checkDraw()) {
+                gameActive = false;
+                status.textContent = 'Ничья! 🤝';
+            } else if (gameActive) {
+                status.textContent = `Ход игрока ${currentPlayer}`;
+            }
+        }
+
+        function handleCellClick(e) {
+            const cell = e.target;
+            const index = cell.getAttribute('data-index');
+
+            if (board[index] !== '' || !gameActive) return;
+
+            const positions = currentPlayer === 'X' ? xPositions : oPositions;
+
+            // Если уже 3 символа, удаляем самый первый
+            if (positions.length >= 3) {
+                const oldestIndex = positions.shift();
+                removeSymbol(oldestIndex);
+            }
+
+            // Добавляем новую позицию
+            board[index] = currentPlayer;
+            cell.textContent = currentPlayer;
+            cell.classList.add('taken', currentPlayer.toLowerCase());
+            positions.push(index);
+
+            // Устанавливаем таймер на 15 секунд
+            cellTimers[index] = setTimeout(() => {
+                removeSymbol(index);
+            }, 15000);
+
+            // Запускаем мигание за 3 секунды до исчезновения (через 12 секунд)
+            cellBlinkTimers[index] = setTimeout(() => {
+                cells[index].classList.add('blinking');
+            }, 12000);
+
+            if (checkWin()) {
+                gameActive = false;
+                status.textContent = `Победил игрок ${currentPlayer}! 🎉`;
+                updateScore(currentPlayer);
+                highlightWinner(currentPlayer);
+                return;
+            }
+
+            if (checkDraw()) {
+                gameActive = false;
+                status.textContent = 'Ничья! 🤝';
+                return;
+            }
+
+            currentPlayer = currentPlayer === 'X' ? 'O' : 'X';
+            status.textContent = `Ход игрока ${currentPlayer} (15 сек)`;
+        }
+
+        function checkWin() {
+            return winPatterns.some(pattern => {
+                return pattern.every(index => board[index] === currentPlayer);
+            });
+        }
+
+        function checkWinForPlayer(player) {
+            return winPatterns.some(pattern => {
+                return pattern.every(index => board[index] === player);
+            });
+        }
+
+        function checkDraw() {
+            return board.every(cell => cell !== '');
+        }
+
+        function highlightWinner(winner) {
+            winPatterns.forEach(pattern => {
+                if (pattern.every(index => board[index] === winner)) {
+                    pattern.forEach(index => {
+                        cells[index].classList.add('winner');
+                    });
+                }
+            });
+        }
+
+        function updateScore(winner) {
+            if (winner === 'X') {
+                scoreX++;
+                scoreXEl.textContent = scoreX;
+            } else {
+                scoreO++;
+                scoreOEl.textContent = scoreO;
+            }
+        }
+
+        function restartGame() {
+            currentPlayer = 'X';
+            board = ['', '', '', '', '', '', '', '', ''];
+            gameActive = true;
+            xPositions = [];
+            oPositions = [];
+            status.textContent = `Ход игрока ${currentPlayer} (15 сек)`;
+
+            // Очищаем все таймеры
+            Object.keys(cellTimers).forEach(key => {
+                clearTimeout(cellTimers[key]);
+            });
+            cellTimers = {};
+
+            Object.keys(cellBlinkTimers).forEach(key => {
+                clearTimeout(cellBlinkTimers[key]);
+            });
+            cellBlinkTimers = {};
+
+            cells.forEach(cell => {
+                cell.textContent = '';
+                cell.classList.remove('taken', 'x', 'o', 'winner', 'blinking');
+            });
+        }
+
+        cells.forEach(cell => cell.addEventListener('click', handleCellClick));
+        restartBtn.addEventListener('click', restartGame);
+    </script>
+</body>
+</html>
